@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>みんなのお気に入りの源泉温泉を検索</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=libraries=places"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f9f9f9;
+        color: #333;
+      }
+
+      header {
+        background-color: #ff6347;
+        color: white;
+        padding: 20px 10px;
+        text-align: center;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 1.8rem;
+      }
+
+      main {
+        padding: 20px;
+      }
+
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        max-width: 600px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      label {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      input[type="text"],
+      textarea {
+        padding: 10px;
+        font-size: 1rem;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        width: 100%;
+      }
+
+      button {
+        background-color: #ff6347;
+        color: white;
+        margin: 5px;
+        padding: 5px 5px;
+        border: none;
+        border-radius: 5px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+      }
+
+      button:hover {
+        background-color: #ff4500;
+      }
+
+      #map {
+        width: 100%;
+        height: 300px;
+        margin-top: 20px;
+        border-radius: 10px;
+      }
+
+      footer {
+        margin-top: 20px;
+        text-align: center;
+        font-size: 0.8rem;
+        color: #666;
+      }
+
+      #onsen-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        background-color: #fff;
+      }
+
+      #onsen-table th,
+      #onsen-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+
+      #onsen-table th {
+        background-color: #ff6347;
+        color: white;
+        font-weight: bold;
+      }
+
+      #onsen-table tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+
+      /* レスポンシブ対応 */
+      @media (max-width: 600px) {
+        header h1 {
+          font-size: 1.5rem;
+        }
+
+        form {
+          padding: 15px;
+        }
+
+        button {
+          font-size: 0.9rem;
+          padding: 8px 16px;
+        }
+
+        #map {
+          height: 200px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h2>みんなのお気に入りの源泉温泉を検索</h2>
+    <input type="text" id="search" placeholder="温泉名を入力" />
+    <button id="search-btn">検索</button>
+    <ul id="search-results"></ul>
+    <div id="map"></div>
+
+    <div id="onsen-list">
+      <h2>源泉温泉一覧</h2>
+      <table id="onsen-table" border="1">
+        <thead>
+          <tr>
+            <!-- <th>場所ID</th> -->
+            <th>施設名</th>
+            <th>紹介文</th>
+            <th>種別</th>
+            <th>住所</th>
+            <th>電話番号</th>
+            <th>営業時間</th>
+            <th>定休日</th>
+            <th>価格</th>
+            <th>泉質</th>
+            <th>効能</th>
+            <th>アメニティ</th>
+            <th>施設</th>
+            <th>アクセス</th>
+            <th>その他の情報</th>
+          </tr>
+        </thead>
+        <tbody id="onsen-data">
+          <!-- select.phpのデータがここに挿入されます -->
+        </tbody>
+      </table>
+    </div>
+
+    <div id="comment-section">
+      <h2>コメント一覧</h2>
+      <table id="comment-table">
+        <thead>
+          <tr>
+            <th>場所名</th>
+            <th>評価</th>
+            <th>コメント</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- コメントがここに追加されます -->
+        </tbody>
+      </table>
+      <div class="back-button">
+        <button onclick="window.location.href='index.html'">
+          トップページに戻る
+        </button>
+      </div>
+    </div>
+
+    <script>
+      let map;
+      let markers = [];
+      let selectedPlace = null;
+
+      function initMap() {
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: { lat: 35.6895, lng: 139.6917 }, // 東京の座標
+          zoom: 10,
+        });
+      }
+
+      google.maps.event.addDomListener(window, "load", initMap);
+
+      // 検索ボタンが押されたときの処理
+      $("#search-btn").on("click", function () {
+        const query = $("#search").val();
+        const service = new google.maps.places.PlacesService(map);
+
+        service.textSearch({ query }, function (results, status) {
+          if (status === google.maps.places.PlacesServiceStatus.OK) {
+            $("#search-results").empty();
+            markers.forEach((marker) => marker.setMap(null));
+            markers = [];
+
+            results.forEach((place) => {
+              if (place.geometry && place.geometry.location) {
+                $("#search-results").append(
+                  `<li>
+                  ${place.name} - ${place.formatted_address}
+                  <button class="show-btn" data-lat="${place.geometry.location.lat()}" data-lng="${place.geometry.location.lng()}" data-place-name="${
+                    place.name
+                  }" data-place-id="${place.place_id}">表示</button>
+                </li>`
+                );
+              }
+            });
+
+            $(".show-btn").on("click", function () {
+              const lat = parseFloat($(this).data("lat"));
+              const lng = parseFloat($(this).data("lng"));
+              const placeName = $(this).data("place-name");
+              const placeId = $(this).data("place-id");
+              selectedPlace = { lat, lng, placeId, placeName };
+
+              map.setCenter({ lat, lng });
+              map.setZoom(15);
+
+              const marker = new google.maps.Marker({
+                position: { lat, lng },
+                map,
+                title: placeName,
+              });
+
+              markers.push(marker);
+
+              // 源泉温泉一覧を読み込む
+              function loadOnsenList(placeName, placeId) {
+                $.ajax({
+                  url: "gensen_select.php", // gensen_select.phpを呼び出し
+                  type: "GET",
+                  data: { place_id: placeId },
+                  success: function (response) {
+                    // gensen_select.phpのHTMLレスポンスを <tbody> に挿入
+                    $("#onsen-data").html(response);
+                  },
+                  error: function (xhr, status, error) {
+                    console.error("温泉一覧取得エラー:", error);
+                    alert("温泉一覧を取得できませんでした。");
+                  },
+                });
+              }
+
+              // // ページ読み込み時に実行
+              $(document).ready(function () {
+                loadOnsenList(placeName, placeId);
+              });
+
+              
+              // コメントを取得して表示
+              loadComments(placeName, placeId);
+            });
+          } else {
+            alert("検索に失敗しました: " + status);
+          }
+        });
+      });
+
+      // 源泉コメントを取得し表示する
+      function loadComments(placeName, placeId) {
+        $.ajax({
+          url: "get_comments.php",
+          type: "GET",
+          data: { place_id: placeId },
+          success: function (response) {
+            const $commentTableBody = $("#comment-table tbody");
+            $commentTableBody.empty();
+
+            if (response.comments && response.comments.length > 0) {
+              response.comments.forEach((comment) => {
+                $commentTableBody.append(`
+                <tr>
+                  <td>${placeName}</td>
+                  <td>${comment.rating}</td>
+                  <td>${comment.recommendation}</td>
+                </tr>
+              `);
+              });
+            } else {
+              $commentTableBody.append(
+                '<tr><td colspan="4">コメントはまだありません。</td></tr>'
+              );
+            }
+          },
+          error: function (xhr, status, error) {
+            console.error("コメント取得エラー:", error);
+            alert("コメントを取得できませんでした。");
+          },
+        });
+      }
+    </script>
+
+    <footer>
+      <p>&copy; 2024 源泉温泉検索</p>
+    </footer>
+  </body>
+</html>
