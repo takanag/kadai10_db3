@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>お気に入りの源泉の口コミを登録</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=libraries=places"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f9f9f9;
+        color: #333;
+      }
+
+      header {
+        background-color: #ff6347;
+        color: white;
+        padding: 20px 10px;
+        text-align: center;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 1.8rem;
+      }
+
+      main {
+        padding: 20px;
+      }
+
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        max-width: 600px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      label {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      input[type="text"],
+      textarea {
+        padding: 10px;
+        font-size: 1rem;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        width: 100%;
+      }
+
+      button {
+        background-color: #ff6347;
+        color: white;
+        margin: 5px;
+        padding: 5px 5px;
+        border: none;
+        border-radius: 5px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+      }
+
+      button:hover {
+        background-color: #ff4500;
+      }
+
+      #map {
+        width: 100%;
+        height: 300px;
+        margin-top: 20px;
+        border-radius: 10px;
+      }
+
+      footer {
+        margin-top: 20px;
+        text-align: center;
+        font-size: 0.8rem;
+        color: #666;
+      }
+
+      /* レスポンシブ対応 */
+      @media (max-width: 600px) {
+        header h1 {
+          font-size: 1.5rem;
+        }
+
+        form {
+          padding: 15px;
+        }
+
+        button {
+          font-size: 0.9rem;
+          padding: 8px 16px;
+        }
+
+        #map {
+          height: 200px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h2>お気に入りの源泉の口コミを登録</h2>
+    <input type="text" id="search" placeholder="場所名を入力" />
+    <button id="search-btn">検索</button>
+    <ul id="search-results"></ul>
+    <div id="map"></div>
+
+    <!-- コメント入力フォーム -->
+    <form id="comment-form" style="display: none">
+      <label for="rating">評価</label>
+      <select id="rating" name="rating" required>
+        <option value="">選択してください</option>
+        <option value="1">1 - 良くない</option>
+        <option value="2">2 - あまり良くない</option>
+        <option value="3">3 - 普通</option>
+        <option value="4">4 - 良い</option>
+        <option value="5">5 - 非常に良い</option>
+      </select>
+
+      <label for="recommendation">おすすめポイント</label>
+      <textarea
+        id="recommendation"
+        name="recommendation"
+        rows="4"
+        required
+      ></textarea>
+      <button type="submit">登録</button>
+    </form>
+    <div id="comments"></div>
+    <div class="back-button">
+      <button onclick="window.location.href='index.html'">
+        トップページに戻る
+      </button>
+    </div>
+
+    <script>
+      let map;
+      let markers = [];
+      let selectedPlace = null;
+
+      function initMap() {
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: { lat: 35.6895, lng: 139.6917 },
+          zoom: 10,
+        });
+      }
+
+      google.maps.event.addDomListener(window, "load", initMap);
+
+      // 検索ボタンが押されたときの処理
+      $("#search-btn").on("click", function () {
+        const query = $("#search").val();
+        const service = new google.maps.places.PlacesService(map);
+
+        service.textSearch({ query }, function (results, status) {
+          if (status === google.maps.places.PlacesServiceStatus.OK) {
+            $("#search-results").empty();
+            markers.forEach((marker) => marker.setMap(null));
+            markers = [];
+
+            results.forEach((place) => {
+              if (place.geometry && place.geometry.location) {
+                const placeData = {
+                  name: place.name,
+                  formatted_address: place.formatted_address,
+                  location: {
+                    lat: place.geometry.location.lat(),
+                    lng: place.geometry.location.lng(),
+                  },
+                  place_id: place.place_id,
+                };
+
+                $("#search-results").append(`
+      <li>
+        ${place.name} - ${place.formatted_address}
+        <button class="show-btn" data-place='${JSON.stringify(
+          placeData
+        )}'>表示</button>
+      </li>
+    `);
+              }
+            });
+
+            // 検索結果に対して作成されたボタンにイベントを登録
+            $(".show-btn").on("click", function () {
+              const placeData = JSON.parse($(this).attr("data-place")); // JSONをパース
+              console.log("Parsed place data:", placeData);
+
+              // selectedPlace を設定
+              selectedPlace = placeData;
+
+              const position = {
+                lat: placeData.location.lat,
+                lng: placeData.location.lng,
+              };
+
+              map.setCenter(position);
+              map.setZoom(15);
+
+              const marker = new google.maps.Marker({
+                position,
+                map,
+                title: placeData.name,
+              });
+
+              markers.push(marker);
+
+              // コメントフォームを表示
+              $("#comment-form").show();
+            });
+          } else {
+            alert("検索に失敗しました: " + status);
+          }
+        });
+      });
+
+      $("#comment-form").on("submit", function (e) {
+        e.preventDefault();
+
+        if (!selectedPlace) {
+          alert("場所を選択してください。");
+          return;
+        }
+        
+        // コメントを登録
+        const formData = new FormData();
+        formData.append("place_id", selectedPlace.place_id);
+        formData.append("rating", $("#rating").val());
+        formData.append("recommendation", $("#recommendation").val());
+
+        $.ajax({
+          url: "save_comment.php",
+          type: "POST",
+          data: formData,
+          processData: false,
+          contentType: false,
+          success: function (response) {
+            alert("コメントが保存されました！");
+            loadComments(selectedPlace.place_id);
+            $("#comment-form")[0].reset();
+          },
+          error: function (xhr, status, error) {
+            console.error("保存エラー:", error);
+            alert("コメントの保存に失敗しました。");
+          },
+        });
+      });
+
+      // コメントを取得し表示する
+      function loadComments(placeId) {
+        $.ajax({
+          url: "get_comments.php",
+          type: "GET",
+          data: { place_id: placeId },
+          success: function (response) {
+            const $commentList = $("#comment-list");
+            $commentList.empty();
+
+            if (response.comments.length > 0) {
+              response.comments.forEach((comment) => {
+                $commentList.append(`
+            <div class="comment-item">
+              <p>評価: ${comment.rating}</p>
+              <p>コメント: ${comment.recommendation}</p>
+            </div>
+          `);
+              });
+            } else {
+              $commentList.append("<p>コメントはまだありません。</p>");
+            }
+          },
+          error: function (xhr, status, error) {
+            console.error("コメント取得エラー:", error);
+            alert("コメントを取得できませんでした。");
+          },
+        });
+      }
+    </script>
+    <footer>
+      <p>&copy; 2024 源泉温泉検索</p>
+    </footer>
+  </body>
+</html>
